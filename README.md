@@ -8,7 +8,7 @@ A production-grade web application built for a UK energy utility's day-ahead pow
 
 ## 1. Project Links & Demos
 
-- **Live Deployed Application:** `https://uk-wind-trading-desk.vercel.app` *(Placeholder &ndash; see deployment instructions below)*
+- **Live Deployed Application:** `https://day-ahead-wind-desk-zeta.vercel.app/`
 - **Demo Video Walkthrough:** `https://youtu.be/placeholder-demo-video` *(Placeholder)*
 - **Reviewer Walkthrough Document:** [docs/REVIEWER_WALKTHROUGH.md](docs/REVIEWER_WALKTHROUGH.md)
 
@@ -349,13 +349,7 @@ git config user.email
 
 ---
 
-## 12. AI Tools Used
-
-This project was developed with code assistance from **Google Antigravity** (code generation and test implementation) and **Claude** (planning and architectural review). All generated logic, calculations, and tests were thoroughly reviewed, validated, and verified against official Elexon specifications by the candidate.
-
----
-
-## 13. Submission Checklist
+## 12. Submission Checklist
 
 - [x] Scope strictly limited to national UK wind and Elexon BMRS data for January 2026 decisions.
 - [x] Pure core logic function in isolated module with docstrings and zero side effects.
