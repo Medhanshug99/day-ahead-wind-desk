@@ -1,0 +1,44 @@
+# OPTIONAL REFERENCE ONLY
+# Primary deployment targets for this assignment are Vercel and Heroku.
+# This Render blueprint is preserved for operators wishing to deploy on Render.
+services:
+  # Backend API Web Service
+  - type: web
+    name: uk-power-trading-backend
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DECISION_CUTOFF_HOUR
+        value: 9
+      - key: DELIVERY_START
+        value: 2026-01-02
+      - key: DELIVERY_END
+        value: 2026-02-01
+      - key: DATA_DIR
+        value: data
+      - key: CORS_ORIGINS
+        sync: false
+
+  # Frontend Static Site
+  - type: static
+    name: uk-power-trading-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: uk-power-trading-backend
+          property: host
+

@@ -1,0 +1,92 @@
+name: CI / Test & Container Verification
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  backend-test:
+    name: Backend Container & Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend container image
+        run: docker build -t uk-power-backend:test backend/
+
+      - name: Run pytest test suite inside container
+        run: docker run --rm uk-power-backend:test pytest -v
+
+  frontend-build:
+    name: Frontend Typecheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck and build frontend
+        working-directory: frontend
+        run: npm run build
+
+  integration-test:
+    name: Full-Stack Docker Compose Integration
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start services with docker compose
+        run: docker compose up -d --build
+
+      - name: Wait for backend healthcheck
+        run: |
+          echo "Waiting for backend service to become healthy..."
+          for i in {1..30}; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' uk_power_backend || echo "unknown")
+            echo "Attempt $i: Backend health status is $STATUS"
+            if [ "$STATUS" == "\"healthy\"" ]; then
+              echo "Backend is healthy!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Verify API health endpoint
+        run: |
+          echo "=== Testing /api/health ==="
+          curl -f -s http://localhost:8000/api/health | jq .
+
+      - name: Verify API overall metrics endpoint
+        run: |
+          echo "=== Testing /api/metrics?group_by=overall ==="
+          curl -f -s "http://localhost:8000/api/metrics?group_by=overall" | jq .
+
+      - name: Verify API decision forecast endpoint
+        run: |
+          echo "=== Testing /api/forecast/decision?delivery_date=2026-01-15 ==="
+          curl -f -s "http://localhost:8000/api/forecast/decision?delivery_date=2026-01-15" | jq .coverage
+
+      - name: Verify frontend container serves web application
+        run: |
+          echo "=== Testing Frontend HTTP Server ==="
+          curl -f -s -I http://localhost:5173/ | grep "HTTP/1.1 200 OK"
+
+      - name: Tear down docker compose
+        if: always()
+        run: docker compose down
+

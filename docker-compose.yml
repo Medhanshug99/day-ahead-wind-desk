@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: uk_power_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - DECISION_CUTOFF_HOUR=${DECISION_CUTOFF_HOUR:-9}
+      - DELIVERY_START=${DELIVERY_START:-2026-01-02}
+      - DELIVERY_END=${DELIVERY_END:-2026-02-01}
+      - DATA_DIR=data
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:80}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-}
+    container_name: uk_power_frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
