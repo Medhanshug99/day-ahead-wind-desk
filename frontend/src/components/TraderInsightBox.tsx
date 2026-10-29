@@ -1,6 +1,7 @@
 import React from 'react';
-import { AlertTriangle, TrendingUp, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { MetricValues } from '../types';
+import { formatDeliveryDate } from './DeliveryPicker';
 
 interface TraderInsightBoxProps {
   overallMetrics?: MetricValues;
@@ -17,97 +18,52 @@ export const TraderInsightBox: React.FC<TraderInsightBoxProps> = ({
 
   const bias = overallMetrics.bias;
   const p95 = overallMetrics.p95_abs_error;
-  const mae = overallMetrics.mae;
-  const overOrUnder = bias >= 0 ? 'over-estimated' : 'under-estimated';
-  const biasAbs = Math.abs(bias).toFixed(0);
-  const p95Formatted = p95.toFixed(0);
+  const biasAbs = Math.abs(bias).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const p95Formatted = p95.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
-  // Day specific stats if available
   const dayBias = dayMetrics ? dayMetrics.bias : null;
   const dayOverOrUnder = dayBias !== null && dayBias >= 0 ? 'over-forecast' : 'under-forecast';
+  const dayBiasAbs = dayBias !== null ? Math.abs(dayBias).toLocaleString(undefined, { maximumFractionDigits: 0 }) : null;
+  const dayMae = dayMetrics ? dayMetrics.mae.toLocaleString(undefined, { maximumFractionDigits: 0 }) : null;
 
   return (
     <div
-      className="card"
+      className="card-subtle"
       style={{
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
-        borderColor: bias > 1000 ? '#e11d48' : '#0284c7',
-        borderLeftWidth: '4px',
-        marginBottom: '1.5rem',
-        padding: '1.25rem 1.5rem',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '0.75rem',
+        padding: '0.875rem 1rem',
+        borderRadius: 'var(--radius-md)',
       }}
     >
-      <div className="flex items-start gap-4">
-        <div
-          style={{
-            background: 'rgba(244, 63, 94, 0.15)',
-            padding: '0.625rem',
-            borderRadius: '0.5rem',
-            color: '#fb7185',
-            marginTop: '2px',
-          }}
-        >
-          <ShieldAlert size={22} />
+      <div style={{ color: 'var(--accent-brand-line)', marginTop: '2px', flexShrink: 0 }}>
+        <Info size={16} />
+      </div>
+
+      <div style={{ flex: 1 }}>
+        <div className="flex items-center gap-2" style={{ marginBottom: '0.25rem' }}>
+          <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
+            Trader Note
+          </span>
+          <span className="metadata-dot" />
+          <span className="text-xs text-muted tabular-nums">
+            {formatDeliveryDate(selectedDate)}
+          </span>
         </div>
 
-        <div style={{ flex: 1 }}>
-          <div className="flex items-center justify-between md-flex-col gap-2" style={{ marginBottom: '0.5rem' }}>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-rose">
-              Day-Ahead Power Trading Desk Advisory &bull; National Wind Procurement
-            </h3>
-            <span className="badge badge-amber font-mono">
-              Month Baseline Bias: +{biasAbs} MW
-            </span>
-          </div>
+        <p className="text-xs text-primary" style={{ lineHeight: '1.5' }}>
+          At the 09:00 UK cutoff, day-ahead forecasts ran about 1.75 GW (+{biasAbs} MW) above metered wind throughout January.
+          Plan a thermal buffer covering the baseline bias plus up to {p95Formatted} MW at P95 to safeguard against cashout imbalance exposure.
+          {dayBias !== null && dayBiasAbs && dayMae && (
+            <span> On this delivery day, forecasts ran {dayOverOrUnder} by {dayBiasAbs} MW with {dayMae} MW MAE.</span>
+          )}
+        </p>
 
-          <div className="text-sm text-slate-200" style={{ lineHeight: '1.6' }}>
-            <p style={{ marginBottom: '0.5rem' }}>
-              <strong>Operational Risk Warning: </strong>
-              Wind forecasts at decision time (09:00 UK on D-1) <strong>{overOrUnder}</strong> generation by{' '}
-              <strong className="text-rose font-mono">+{biasAbs} MW</strong> on average across the month.
-              The verified finding is: forecasts over-predict FUELHH wind by about 1.75 GW at every horizon. Possible explanations (e.g. embedded wind or transmission curtailment) cannot be verified with the data available in this challenge. Traders procuring power based purely on the nominal wind forecast will systematically under-purchase thermal baseload, risking cashout / System Buy Price (SBP) imbalance charges.
-            </p>
-
-            <div className="grid grid-cols-3 md-grid-cols-1 gap-3" style={{ marginTop: '0.75rem' }}>
-              <div className="card-sm flex items-start gap-2">
-                <AlertTriangle size={16} className="text-amber" style={{ marginTop: '2px' }} />
-                <div className="text-xs">
-                  <span className="text-muted block">Recommended Reserve Buffer:</span>
-                  <span className="font-mono font-bold text-amber">
-                    &plusmn;{p95Formatted} MW (P95)
-                  </span>
-                  <span className="text-dim block">Covers 95% of forecast shock</span>
-                </div>
-              </div>
-
-              <div className="card-sm flex items-start gap-2">
-                <TrendingUp size={16} className="text-cyan" style={{ marginTop: '2px' }} />
-                <div className="text-xs">
-                  <span className="text-muted block">Expected Mean Error (MAE):</span>
-                  <span className="font-mono font-bold text-cyan">{mae.toFixed(0)} MW</span>
-                  <span className="text-dim block">Average deviation from actuals</span>
-                </div>
-              </div>
-
-              <div className="card-sm flex items-start gap-2">
-                <CheckCircle2 size={16} className="text-emerald" style={{ marginTop: '2px' }} />
-                <div className="text-xs">
-                  <span className="text-muted block">Selected Day ({selectedDate}):</span>
-                  {dayBias !== null ? (
-                    <span className="font-mono font-bold text-slate-100">
-                      {dayOverOrUnder} by {Math.abs(dayBias).toFixed(0)} MW
-                    </span>
-                  ) : (
-                    <span className="text-muted">Viewing day-level metrics</span>
-                  )}
-                  <span className="text-dim block">Day D outturn comparison</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <p className="text-xs text-muted" style={{ marginTop: '0.375rem', fontSize: '0.6875rem', lineHeight: '1.4' }}>
+          Note: Over-prediction of FUELHH metered wind by ~1.75 GW is the verified empirical finding. Potential fleet coverage differences (embedded wind) or transmission curtailment are unverified hypotheses with the available challenge data.
+        </p>
       </div>
     </div>
   );
 };
-

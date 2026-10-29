@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 interface DeliveryPickerProps {
   selectedDate: string; // YYYY-MM-DD
@@ -8,95 +8,127 @@ interface DeliveryPickerProps {
   maxDate?: string;
 }
 
+// Format YYYY-MM-DD into "Sun 4 Jan 2026" without timezone ambiguity
+export const formatDeliveryDate = (isoStr: string): string => {
+  const parts = isoStr.split('-').map(Number);
+  if (parts.length !== 3) return isoStr;
+  const [year, month, day] = parts;
+  const d = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(d).replace(',', '');
+};
+
+// Generate list of delivery dates for January 2026 (Jan 2 - Feb 1)
+const generateDateOptions = (start: string, end: string) => {
+  const dates: { value: string; label: string }[] = [];
+  const [sy, sm, sd] = start.split('-').map(Number);
+  const [ey, em, ed] = end.split('-').map(Number);
+  const cur = new Date(Date.UTC(sy, sm - 1, sd, 12, 0, 0));
+  const last = new Date(Date.UTC(ey, em - 1, ed, 12, 0, 0));
+
+  while (cur <= last) {
+    const iso = cur.toISOString().split('T')[0];
+    dates.push({
+      value: iso,
+      label: formatDeliveryDate(iso),
+    });
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
+};
+
 export const DeliveryPicker: React.FC<DeliveryPickerProps> = ({
   selectedDate,
   onChange,
   minDate = '2026-01-02',
   maxDate = '2026-02-01',
 }) => {
-  const currentDate = new Date(selectedDate);
+  const dateOptions = generateDateOptions(minDate, maxDate);
+
+  const currentIndex = dateOptions.findIndex((d) => d.value === selectedDate);
+  const isFirst = currentIndex <= 0;
+  const isLast = currentIndex >= dateOptions.length - 1;
 
   const handlePrev = () => {
-    const prev = new Date(currentDate);
-    prev.setDate(prev.getDate() - 1);
-    const iso = prev.toISOString().split('T')[0];
-    if (iso >= minDate) onChange(iso);
+    if (!isFirst && currentIndex > 0) {
+      onChange(dateOptions[currentIndex - 1].value);
+    }
   };
 
   const handleNext = () => {
-    const next = new Date(currentDate);
-    next.setDate(next.getDate() + 1);
-    const iso = next.toISOString().split('T')[0];
-    if (iso <= maxDate) onChange(iso);
+    if (!isLast && currentIndex < dateOptions.length - 1) {
+      onChange(dateOptions[currentIndex + 1].value);
+    }
   };
 
-  const isMin = selectedDate <= minDate;
-  const isMax = selectedDate >= maxDate;
-
-  // Decision date is delivery date - 1 day
-  const decisionDateObj = new Date(currentDate);
-  decisionDateObj.setDate(decisionDateObj.getDate() - 1);
-  const decisionDateStr = decisionDateObj.toISOString().split('T')[0];
-
   return (
-    <div className="card flex items-center justify-between md-flex-col gap-4" style={{ marginBottom: '1.5rem', padding: '0.875rem 1.25rem' }}>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Calendar size={18} className="text-cyan" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Delivery Day (D):
-          </span>
-        </div>
+    <div className="inline-flex items-center gap-1.5" style={{ userSelect: 'none' }}>
+      <button
+        onClick={handlePrev}
+        disabled={isFirst}
+        className="btn btn-secondary"
+        style={{ width: '28px', height: '28px', padding: 0 }}
+        aria-label="Previous delivery day"
+        title="Previous delivery day"
+      >
+        <ChevronLeft size={16} />
+      </button>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handlePrev}
-            disabled={isMin}
-            className="btn btn-secondary"
-            style={{ padding: '0.375rem 0.625rem', opacity: isMin ? 0.4 : 1 }}
-            title="Previous Day"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          <input
-            type="date"
-            value={selectedDate}
-            min={minDate}
-            max={maxDate}
-            onChange={(e) => e.target.value && onChange(e.target.value)}
-            className="font-mono font-bold text-sm"
-            style={{
-              background: '#0f172a',
-              border: '1px solid #334155',
-              color: '#f8fafc',
-              padding: '0.375rem 0.75rem',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          />
-
-          <button
-            onClick={handleNext}
-            disabled={isMax}
-            className="btn btn-secondary"
-            style={{ padding: '0.375rem 0.625rem', opacity: isMax ? 0.4 : 1 }}
-            title="Next Day"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
+      {/* Styled Date Dropdown with Calendar Icon */}
+      <div
+        className="inline-flex items-center gap-2"
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-muted)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '0.25rem 0.625rem',
+          height: '28px',
+        }}
+      >
+        <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
+        <select
+          value={selectedDate}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Select delivery day"
+          className="tabular-nums"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-primary)',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            cursor: 'pointer',
+            outline: 'none',
+            paddingRight: '0.25rem',
+          }}
+        >
+          {dateOptions.map((opt) => (
+            <option
+              key={opt.value}
+              value={opt.value}
+              style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
+            >
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Decision Date context */}
-      <div className="flex items-center gap-3 text-xs">
-        <span className="text-muted">
-          Trading Decision Gate: <strong className="text-amber font-mono">{decisionDateStr} 09:00 UK</strong>
-        </span>
-        <span className="badge badge-indigo">Delivery D = Decision + 1</span>
-      </div>
+      <button
+        onClick={handleNext}
+        disabled={isLast}
+        className="btn btn-secondary"
+        style={{ width: '28px', height: '28px', padding: 0 }}
+        aria-label="Next delivery day"
+        title="Next delivery day"
+      >
+        <ChevronRight size={16} />
+      </button>
     </div>
   );
 };
-

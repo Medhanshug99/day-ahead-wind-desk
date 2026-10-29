@@ -14,7 +14,7 @@ import { TraderInsightBox } from './components/TraderInsightBox';
 import { DecisionView } from './components/DecisionView';
 import { AccuracyView } from './components/AccuracyView';
 import { MethodologyModal } from './components/MethodologyModal';
-import { AlertCircle, RefreshCw, BarChart2, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 export const App: React.FC = () => {
   // State
@@ -36,54 +36,45 @@ export const App: React.FC = () => {
   const [isDayLoading, setIsDayLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initial load: Health, Overall Metrics, Day Metrics, Hour Metrics, Horizon & Comparison
+  // Initial load: fast decision view first, background accuracy data
+  const initApp = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [healthRes, overallRes, initialDecisionRes] = await Promise.all([
+        api.getHealth(),
+        api.getMetrics('2026-01-02', '2026-02-01', 'overall'),
+        api.getDecisionForecast(selectedDate),
+      ]);
+
+      setHealth(healthRes);
+      if (overallRes.metrics.length > 0) setOverallMetrics(overallRes.metrics[0]);
+      setDecisionData(initialDecisionRes);
+      setIsLoading(false);
+
+      // Fetch remaining full-month breakdown in background
+      Promise.all([
+        api.getMetrics('2026-01-02', '2026-02-01', 'day'),
+        api.getMetrics('2026-01-02', '2026-02-01', 'hour'),
+        api.getComparison('2026-01-02', '2026-02-01'),
+        api.getHorizonMetrics(),
+      ]).then(([dayRes, hourRes, compRes, horizonRes]) => {
+        setDayMetricsList(dayRes.metrics);
+        setHourMetricsList(hourRes.metrics);
+        setComparisonData(compRes);
+        setHorizonData(horizonRes);
+      }).catch((err) => {
+        console.warn('Background metrics fetch issue:', err);
+      });
+    } catch (err: any) {
+      console.error('Initial data load error:', err);
+      setError(err.message || 'Failed to connect to backend API');
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let isMounted = true;
-    const initApp = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [
-          healthRes,
-          overallRes,
-          dayRes,
-          hourRes,
-          compRes,
-          horizonRes,
-          initialDecisionRes,
-        ] = await Promise.all([
-          api.getHealth(),
-          api.getMetrics('2026-01-02', '2026-02-01', 'overall'),
-          api.getMetrics('2026-01-02', '2026-02-01', 'day'),
-          api.getMetrics('2026-01-02', '2026-02-01', 'hour'),
-          api.getComparison('2026-01-02', '2026-02-01'),
-          api.getHorizonMetrics(),
-          api.getDecisionForecast(selectedDate),
-        ]);
-
-        if (isMounted) {
-          setHealth(healthRes);
-          if (overallRes.metrics.length > 0) setOverallMetrics(overallRes.metrics[0]);
-          setDayMetricsList(dayRes.metrics);
-          setHourMetricsList(hourRes.metrics);
-          setComparisonData(compRes);
-          setHorizonData(horizonRes);
-          setDecisionData(initialDecisionRes);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          console.error('Initial data load error:', err);
-          setError(err.message || 'Failed to connect to backend API');
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
     initApp();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // Update decision view when delivery date changes
@@ -103,110 +94,139 @@ export const App: React.FC = () => {
   const selectedDayMetrics = dayMetricsList.find((d) => d.group_key === selectedDate);
 
   return (
-    <div style={{ minHeight: '100vh', padding: '1.5rem 0 3rem 0' }}>
-      <div className="container">
-        {/* Header */}
-        <Header
-          cutoffHour={health?.cutoff_hour ?? 9}
-          deliveryWindow={health?.delivery_window ?? '2026-01-02 to 2026-02-01'}
-          onOpenMethodology={() => setIsMethodologyOpen(true)}
-        />
+    <div className="app-shell">
+      {/* 1. Slim Header */}
+      <Header
+        cutoffHour={health?.cutoff_hour ?? 9}
+        deliveryWindow={health?.delivery_window ?? '2026-01-02 to 2026-02-01'}
+        onOpenMethodology={() => setIsMethodologyOpen(true)}
+      />
 
-        {/* Global Error Banner */}
-        {error && (
-          <div
-            className="card flex items-center justify-between"
-            style={{
-              borderColor: '#f43f5e',
-              background: 'rgba(244, 63, 94, 0.1)',
-              marginBottom: '1.5rem',
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <AlertCircle size={20} className="text-rose" />
-              <div>
-                <strong className="text-rose">Backend Connection Error: </strong>
-                <span className="text-slate-300 text-sm">{error}</span>
-              </div>
+      {/* 2. Global Error State */}
+      {error && (
+        <div
+          className="card flex items-center justify-between"
+          style={{
+            borderColor: 'var(--semantic-pos)',
+            background: 'var(--semantic-pos-subtle)',
+            marginBottom: '1rem',
+            padding: '0.875rem 1.25rem',
+          }}
+          role="alert"
+        >
+          <div className="flex items-center gap-3">
+            <AlertCircle size={18} style={{ color: 'var(--semantic-pos)' }} />
+            <div>
+              <strong style={{ color: 'var(--semantic-pos)' }}>Backend Connection Error: </strong>
+              <span className="text-secondary text-xs">{error}</span>
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className="btn btn-secondary text-xs"
-            >
-              <RefreshCw size={14} /> Retry
-            </button>
           </div>
-        )}
+          <button
+            onClick={() => initApp()}
+            className="btn btn-secondary text-xs"
+            aria-label="Retry connection"
+          >
+            <RefreshCw size={13} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
 
-        {/* Date Picker Bar */}
-        <DeliveryPicker
-          selectedDate={selectedDate}
-          onChange={handleDateChange}
-          minDate="2026-01-02"
-          maxDate="2026-02-01"
-        />
-
-        {/* Trader Insight Box */}
-        <TraderInsightBox
-          overallMetrics={overallMetrics ?? undefined}
-          dayMetrics={selectedDayMetrics}
-          selectedDate={selectedDate}
-        />
-
+      {/* 3. Unified Toolbar: Date Picker (Left) & Tabs (Right) */}
+      <div
+        className="flex items-center justify-between md-flex-col gap-3"
+        style={{
+          borderBottom: '1px solid var(--border-subtle)',
+          paddingBottom: '0.75rem',
+          marginBottom: '1rem',
+        }}
+      >
         {/* Navigation Tabs */}
-        <div className="tab-nav">
+        <div className="flex items-center gap-4" role="tablist">
           <button
             onClick={() => setActiveTab('decision')}
-            className={`tab-btn ${activeTab === 'decision' ? 'active' : ''}`}
+            className={`tab-item ${activeTab === 'decision' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'decision'}
           >
-            Decision View ({selectedDate})
+            Decision View
           </button>
           <button
             onClick={() => setActiveTab('accuracy')}
-            className={`tab-btn ${activeTab === 'accuracy' ? 'active' : ''}`}
+            className={`tab-item ${activeTab === 'accuracy' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'accuracy'}
           >
-            Accuracy &amp; Error Analysis (Full Month)
+            Accuracy &amp; Error Analysis
           </button>
         </div>
 
-        {/* Loading State */}
-        {isLoading ? (
-          <div className="card flex flex-col items-center justify-center" style={{ minHeight: '350px' }}>
-            <RefreshCw size={36} className="text-cyan animate-spin" style={{ marginBottom: '1rem' }} />
-            <div className="text-base font-semibold text-slate-200">
-              Loading National Wind Generation Data...
-            </div>
-            <p className="text-xs text-muted" style={{ marginTop: '0.5rem' }}>
-              Retrieving Elexon BMRS WINDFOR forecasts and FUELHH actuals
-            </p>
+        {/* Date Picker (Active only on Decision View) */}
+        {activeTab === 'decision' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">Delivery Day:</span>
+            <DeliveryPicker
+              selectedDate={selectedDate}
+              onChange={handleDateChange}
+              minDate="2026-01-02"
+              maxDate="2026-02-01"
+            />
           </div>
-        ) : (
-          <>
-            {/* Tab 1: Decision View */}
-            {activeTab === 'decision' && decisionData && (
-              <div style={{ opacity: isDayLoading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
-                <DecisionView
-                  decisionData={decisionData}
-                  overallMetrics={overallMetrics ?? undefined}
-                />
-              </div>
-            )}
-
-            {/* Tab 2: Accuracy View */}
-            {activeTab === 'accuracy' && (
-              <AccuracyView
-                overallMetrics={overallMetrics ?? undefined}
-                dayMetricsList={dayMetricsList}
-                hourMetricsList={hourMetricsList}
-                comparisonData={comparisonData?.data ?? []}
-                horizonMetricsList={horizonData?.data ?? []}
-              />
-            )}
-          </>
         )}
       </div>
 
-      {/* Methodology Modal */}
+      {/* 4. Main Content Area */}
+      {isLoading ? (
+        <div className="flex flex-col gap-4">
+          {/* Skeleton KPI Strip */}
+          <div className="grid grid-cols-4 md-grid-cols-2 sm-grid-cols-1 gap-3">
+            <div className="skeleton" style={{ height: '96px' }} />
+            <div className="skeleton" style={{ height: '96px' }} />
+            <div className="skeleton" style={{ height: '96px' }} />
+            <div className="skeleton" style={{ height: '96px' }} />
+          </div>
+          {/* Skeleton Chart */}
+          <div className="skeleton" style={{ height: '420px', borderRadius: 'var(--radius-md)' }} />
+          {/* Skeleton Table */}
+          <div className="skeleton" style={{ height: '200px', borderRadius: 'var(--radius-md)' }} />
+        </div>
+      ) : (
+        <>
+          {/* View 1: Decision View */}
+          {activeTab === 'decision' && decisionData && (
+            <div
+              className="flex flex-col gap-4"
+              style={{ opacity: isDayLoading ? 0.6 : 1, transition: 'opacity 0.15s' }}
+            >
+              <DecisionView
+                decisionData={decisionData}
+                overallMetrics={overallMetrics ?? undefined}
+                dayMetrics={selectedDayMetrics}
+              />
+
+              {/* Compact Trader Note Panel Below Chart */}
+              <TraderInsightBox
+                overallMetrics={overallMetrics ?? undefined}
+                dayMetrics={selectedDayMetrics}
+                selectedDate={selectedDate}
+              />
+            </div>
+          )}
+
+          {/* View 2: Accuracy View */}
+          {activeTab === 'accuracy' && (
+            <AccuracyView
+              overallMetrics={overallMetrics ?? undefined}
+              dayMetricsList={dayMetricsList}
+              hourMetricsList={hourMetricsList}
+              comparisonData={comparisonData?.data ?? []}
+              horizonMetricsList={horizonData?.data ?? []}
+            />
+          )}
+        </>
+      )}
+
+      {/* 5. Methodology Modal */}
       <MethodologyModal
         isOpen={isMethodologyOpen}
         onClose={() => setIsMethodologyOpen(false)}
@@ -215,4 +235,3 @@ export const App: React.FC = () => {
     </div>
   );
 };
-
